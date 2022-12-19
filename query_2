@@ -1,0 +1,72 @@
+alter table `bart-ridership.completed_tables.final_table`
+rename column Report_Date2 to Report_Date;
+
+select Station_Name, Report_Date, Total_Entering
+from `bart-ridership.completed_tables.final_table`
+order by Total_Entering desc;
+
+select Station_Name, sum(Total_Exiting) as Total_Exiting
+from `bart-ridership.completed_tables.final_table`
+group by Station_Name
+order by Total_Exiting desc;
+
+select Station_Name, Report_Date, Latitude, Longitude, Total_Entering, Total_Exiting,
+  case
+    when Lag_Total_Entering is null or Lag_Total_Entering = 0 then null
+    when Station_Name <> Preceding_Station_Name then null
+    else (Total_Entering - Lag_Total_Entering) / Lag_Total_Entering
+    end as Entering_Percent_Change,
+  case
+    when Lag_Total_Exiting is null or Lag_Total_Exiting = 0 then null
+    when Station_Name <> Preceding_Station_Name then null
+    else (Total_Exiting - Lag_Total_Exiting) / Lag_Total_Exiting
+    end as Exiting_Percent_Change
+from (
+  select *, lag(Total_Entering, 1, 0) over(order by Station_Name, Report_Date) as Lag_Total_Entering, lag(Total_Exiting, 1, 0) over(order by Station_Name, Report_Date) as Lag_Total_Exiting, lag(Station_Name) over(order by Station_Name, Report_Date) as Preceding_Station_Name
+  from (
+    select Station_Name, Report_Date, Latitude, Longitude, sum(Total_Entering) as Total_Entering, sum(Total_Exiting) as Total_Exiting
+    from `bart-ridership.completed_tables.final_table`
+    group by Station_Name, Report_Date, Latitude, Longitude
+  )
+  order by Station_Name, Report_Date
+);
+
+select max(Total_Entering) as Max_Entering
+from `bart-ridership.completed_tables.visualization_table`;
+
+select max(Total_Exiting) as Max_Exiting
+from `bart-ridership.completed_tables.visualization_table`;
+
+
+select ((max(Max_Entering) - min(Max_Entering)) / min(Max_Entering) * 100) as Current_Drawdown
+from (
+  select max(Total_Entering) as Max_Entering
+  from (
+    select Report_Date, sum(Total_Entering) as Total_Entering
+    from `bart-ridership.completed_tables.visualization_table`
+    group by Report_Date
+    order by Report_Date
+  )
+  union all
+  select Total_Entering as Current_Entering
+  from (
+    select Report_Date, sum(Total_Entering) as Total_Entering
+    from `bart-ridership.completed_tables.visualization_table`
+    group by Report_Date
+    order by Report_Date
+  )
+  where Report_Date = '2021-10-01'
+);
+
+select Station_Name, sum(Total_Entering) as Total_Entering
+from `bart-ridership.completed_tables.visualization_table`
+group by Station_Name
+order by Total_Entering desc;
+
+select Station_Name, sum(Total_Entering) as Total_Entering
+from `bart-ridership.completed_tables.visualization_table`
+where Station_Name = "El Cerrito del Norte"
+group by Station_Name;
+
+
+
