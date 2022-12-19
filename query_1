@@ -1,0 +1,66 @@
+declare report_name string;
+declare date_value date;
+declare table_count int64;
+declare month int64;
+declare month_string string;
+declare starting_month int64;
+declare year int64;
+
+create or replace table `bart-ridership.other_data`.table_names_table as
+select table_name
+from `bart-ridership.ridership_2020.INFORMATION_SCHEMA.TABLES` 
+union all
+select table_name
+from `bart-ridership.ridership_2021.INFORMATION_SCHEMA.TABLES`;
+
+set table_count = (
+  select count(*)
+  from `bart-ridership.other_data`.table_names_table
+);
+
+set month = (
+  select min(month_name)
+  from (
+    select cast(left(table_name, 2) as int64) as month_name
+    from `bart-ridership.other_data`.table_names_table
+  )
+);
+set starting_month = month;
+set year = (
+  select min(year_name)
+  from (
+    select cast(right(table_name, 4) as int64) as year_name
+    from `bart-ridership.other_data`.table_names_table
+  )
+);
+
+loop
+  if month < 10 then
+    set month_string = concat("0", cast(month as string));
+  else
+    set month_string = cast(month as string);
+  end if;
+  set report_name = (
+    select max(table_name)
+    from `bart-ridership.other_data`.table_names_table
+    where left(table_name, 2) = month_string and
+    right(table_name, 4) = cast(year as string)
+  );
+
+  set date_value = parse_date('%m-%Y', report_name);
+  create or replace table `bart-ridership.other_data`.temp_date_check as
+  select date_value;
+  execute immediate concat("alter table `bart-ridership.ridership_", cast(year as string), ".", report_name, "` add column if not exists report_date date");
+  execute immediate concat("update `bart-ridership.ridership_", cast(year as string), ".", report_name, "` set report_date = (select * from `bart-ridership.other_data`.temp_date_check) where true");
+
+  if month < 12 then
+    set month = month + 1;
+  else
+    set month = starting_month;
+    if year < 2021 then
+      set year = year + 1;
+    else
+      leave;
+    end if;
+  end if;
+end loop;
